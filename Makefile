@@ -1,8 +1,17 @@
 .PHONY: all
 all: toplevel
 
-sim_build/neorv32:
-	mkdir sim_build && \
+.PHONY: hello_world
+hello_world:
+	(cd neorv32/sw/example/hello_world && \
+		make USER_FLAGS+=-DUART0_SIM_MODE clean image install \
+	)
+
+# Define here which example program is installed in the imem
+neorv32/rtl/core/neorv32_imem_image.vhd: hello_world
+
+sim_build/neorv32: neorv32/rtl/core/neorv32_imem_image.vhd
+	mkdir -p sim_build && \
 	nvc --work=/Users/martijn/Development/neorv32-test/sim_build/neorv32 \
 	 	-a \
 		-f /Users/martijn/Development/neorv32-test/neorv32/rtl/file_list_core.f \
@@ -26,7 +35,7 @@ toplevel: sim_build/neorv32
 		-e neorv32_tb
 
 .PHONY: run
-run:
+run: toplevel
 	nvc --work=sim_build/work \
 		-L /Users/martijn/Development/neorv32-test/sim_build \
 		-r \
