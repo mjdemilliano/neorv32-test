@@ -21,6 +21,7 @@ def test_runner():
     )
 
     runner.test(hdl_toplevel="neorv32_test_setup_approm", test_module="test_hello_world,",
+                test_args=["--ieee-warnings=off"]
                 )
 
 
