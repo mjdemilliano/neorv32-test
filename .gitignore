@@ -10,3 +10,4 @@ wheels/
 .venv
 
 sim_build/
+*.log
