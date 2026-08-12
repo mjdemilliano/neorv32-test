@@ -7,8 +7,15 @@ hello_world:
 		make USER_FLAGS+=-DUART0_SIM_MODE clean image install \
 	)
 
+.PHONY: blink_led
+blink_led:
+	(cd neorv32/sw/example/demo_blink_led && \
+		make USER_FLAGS+=-DUART0_SIM_MODE clean image install \
+	)
+
 # Define here which example program is installed in the imem
-neorv32/rtl/core/neorv32_imem_image.vhd: hello_world
+# neorv32/rtl/core/neorv32_imem_image.vhd: hello_world
+neorv32/rtl/core/neorv32_imem_image.vhd: blink_led
 
 sim_build/neorv32: neorv32/rtl/core/neorv32_imem_image.vhd
 	mkdir -p sim_build && \
@@ -40,7 +47,9 @@ run: toplevel
 		-L /Users/martijn/Development/neorv32-test/sim_build \
 		-r \
 		--ieee-warnings=off \
-		neorv32_tb
+		neorv32_tb \
+		--wave=sim_build/waves.fst
+
 
 .PHONY: clean
 clean:
