@@ -1,0 +1,11 @@
+[package]
+name = "myvhpi"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# The dynamic is needed to make things compile on MacOS (otherwise it complains about missing symbols).
+vhpi = { version = "0.5.1", features = ["dynamic"]}
+
+[lib]
+crate-type = ["cdylib"]

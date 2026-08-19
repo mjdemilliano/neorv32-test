@@ -84,16 +84,17 @@ clean:
 	rm -rf sim_build
 	rm -f *.log
 
-myvphi/myvhpi.so:
-	$(MAKE) -C myvhpi
+VHPI_PLUGIN := myvhpi/target/debug/libmyvhpi.dylib
+${VHPI_PLUGIN}:
+	(cd myvhpi && cargo build)
 
 .PHONE: mysim
-mysim: myvphi/myvhpi.so
+mysim: ${VHPI_PLUGIN}
 	nvc --work=sim_build/neorv32 \
 		-L /Users/martijn/Development/neorv32-test/sim_build \
 		-e neorv32_tb \
 		-r \
-		--load myvhpi/myvhpi.so \
+		--load ${VHPI_PLUGIN} \
 		--ieee-warnings=off \
 		neorv32_tb \
 		--stop-time=100ms \
