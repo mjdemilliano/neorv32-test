@@ -5,44 +5,34 @@
 
 // NOTE: To see more debug information printed, run with environment variable NVC_VHPI_VERBOSE=1
 
+#define GPIO_OUT_SIZE 32  // We can also read this using the API but let's just hardcode the value.
+
+/// Convert std_logic enum value to string representation.
+static const char std_logic_value_to_str(vhpiEnumT value)
+{
+    // See `vhpi_user.h` for the definitions of vhpiU, vhpiX, etc.
+    // This is also what `vhpi_to_string` does internally.
+    static const char STD_LOGIC_VALUES[] = "UX01ZWLH-";
+    if (value > vhpiDontCare) {
+        return '?';
+    } else {
+        return STD_LOGIC_VALUES[value];
+    }
+}
+
 static void gpio_out_changed(const struct vhpiCbDataS *value) {
-    vhpi_printf("GPIO changed!");
-    if (!value) {
-        vhpi_assert(vhpiError, "value is null: %p", value);
+    if (!value || !value->obj) {
+        vhpi_assert(vhpiError, "value is null: value=%p, value->obj=%p", value, value ? value->obj : NULL);
         return;
     }
-    vhpi_printf("value->obj = %p, value->user_data = %p, value->value = %p", value->obj, value->user_data, value->value);
-    if (!value->obj) {
-        vhpi_assert(vhpiError, "value->obj is null: %p", value->obj);
-        return;
-    }
-    if (!value->user_data) {
-        vhpi_assert(vhpiError, "value->user_data is null: %p", value->obj);
-        return;
-    }
-    // if (!value->value) {
-    //     vhpi_assert(vhpiError, "value->value is null: %p", value->value);
-    //     return;
-    // }
-    // vhpi_printf(" => value = %d", value->value->value.intg);
 
-    const char *kind_name = (const char*) vhpi_get_str(vhpiKindStrP, value->obj);
-    vhpi_printf("kind name: %s", kind_name);
-    int num_dimensions = vhpi_get(vhpiNumDimensionsP, value->obj);
-    vhpi_printf("num dimensions: %d", num_dimensions);
-
-    vhpiHandleT gpio_out_type = vhpi_handle(vhpiType, value->obj);
-    vhpi_printf("type name: %s", vhpi_get_str(vhpiFullNameP, gpio_out_type));
-
-    // vhpiHandleT gpio_out_constrs = vhpi_iterator(vhpiConstraints, gpio_out_type);
-    // vhpiHandleT gpio_out_range = vhpi_scan(gpio_out_constrs);
-    // vhpi_printf("left bound: %d, right bound: %d", vhpi_get(vhpiLeftBoundP, gpio_out_range), vhpi_get(vhpiRightBoundP, gpio_out_range));
-
-
-    vhpiEnumT gpio_out_values[32] = {0};
+    // gpio_out is of type std_ulogic_vector(31 downto 0). To retrieve the value, we need to tell the API the type
+    // that we want to retrieve (which should be compatible with the actual type), and we need to allocate memory
+    // for getting the result.
+    vhpiEnumT gpio_out_values[GPIO_OUT_SIZE] = {0};
     vhpiValueT gpio_out_value = {
         .format = vhpiLogicVecVal,
-        .bufSize = 32 * sizeof(vhpiEnumT),
+        .bufSize = GPIO_OUT_SIZE * sizeof(vhpiEnumT),
         .value = {
             .enumvs = gpio_out_values,
         }
@@ -52,23 +42,13 @@ static void gpio_out_changed(const struct vhpiCbDataS *value) {
         vhpi_assert(vhpiError, "error getting gpio_out value (result=%d)");
         return;
     };
-    const char *val_31 = "?";
-    switch (gpio_out_value.value.enumvs[31]) {
-        case vhpi0:
-            val_31 = "0";
-            break;
-        case vhpi1:
-            val_31 = "1";
-            break;
-        default:
-            val_31 = "s";
-    }
-    vhpi_printf("gpio_out value: [0]=%d [31]=%d [31]=%s", gpio_out_value.value.enumvs[0], gpio_out_value.value.enumvs[31], val_31);
+    // Use enumvs[x] to get a single value.
 
-    unsigned char gpio_out_value_str_buf[1025] = {0};
+    // When you request a string value of a std_logic vector, you get it as a binary string. Index 0 is the left / first bit.
+    unsigned char gpio_out_value_str_buf[GPIO_OUT_SIZE + 1] = {0};
     vhpiValueT gpio_out_value_str = {
         .format = vhpiStrVal,
-        .bufSize = 1024,
+        .bufSize = sizeof(gpio_out_value_str_buf),
         .value = {
             .str = gpio_out_value_str_buf,
         },
@@ -78,50 +58,35 @@ static void gpio_out_changed(const struct vhpiCbDataS *value) {
         vhpi_assert(vhpiError, "error getting gpio_out value (result=%d)");
         return;
     };
-    vhpi_printf("gpio_out value: %s", (const char*) gpio_out_value_str.value.str);
-
-    // if (!value->value) {
-    //     vhpi_assert(vhpiError, "value->value is null: %p", value->value);
-    //     return;
-    // }
-    // vhpi_printf(" => value = %d", value->value->value.intg);
+    vhpi_printf("gpio_out value changed: %s [31]=%c", (const char*) gpio_out_value_str.value.str, std_logic_value_to_str(gpio_out_value.value.enumvs[31]));
 }
 
 static void end_of_init(const vhpiCbDataT *cb_data) {
-    vhpi_printf("End of initialization");
-
     vhpiHandleT root = vhpi_handle(vhpiRootInst, NULL);
 
+    // Start watching gpio_out.
     vhpiHandleT gpio_out = vhpi_handle_by_name("gpio_out", root);
     if (!gpio_out) {
         vhpi_assert(vhpiError, "error getting gpio_out handle");
         return;
     }
-    vhpi_printf("gpio_out obj handle: %p", gpio_out);
-    // vhpiValueT gpio_out_value = {0};
-    // if (0 != vhpi_get_value(gpio_out, &gpio_out_value)) {
-    //     vhpi_assert(vhpiError, "error getting gpio_out value");
-    //     return;
-    // };
-    // vhpi_printf("gpio_out value: %d", gpio_out_value.value.intg);
-
     vhpiCbDataT cb_gpio_out_change = {
         .reason = vhpiCbValueChange,
         .cb_rtn = gpio_out_changed,
         .obj = gpio_out,
         .time = (vhpiTimeT *)-1,
-        .user_data = gpio_out,
     };
     if (!vhpi_register_cb(&cb_gpio_out_change, 0)) {
         vhpi_assert(vhpiError, "error registering callback for gpio_out value change!");
         return;
     }
-    vhpi_printf("Callback registered");
 }
 
 static void shared_startup(void) {
     vhpi_printf("Hello world from VHPI plugin!");
 
+    // Register callback for end of initialization, so that the signals are available and we can
+    // attach watchers to them.
     vhpiCbDataT cb_end_of_init = {
         .reason = vhpiCbEndOfInitialization,
         .cb_rtn = end_of_init,
