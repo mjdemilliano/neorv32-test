@@ -37,14 +37,12 @@ toplevel: sim_build/neorv32
 		/Users/martijn/Development/neorv32-test/neorv32/sim/xbus_memory.vhd \
 		/Users/martijn/Development/neorv32-test/neorv32/sim/jtag_dmi_pkg.vhd \
 		/Users/martijn/Development/neorv32-test/neorv32/sim/neorv32_tb.vhd
-	nvc --work=sim_build/work \
-		-L /Users/martijn/Development/neorv32-test/sim_build \
-		-e neorv32_tb
 
 .PHONY: run
 run: toplevel
 	nvc --work=sim_build/work \
 		-L /Users/martijn/Development/neorv32-test/sim_build \
+		-e neorv32_tb \
 		-r \
 		--ieee-warnings=off \
 		neorv32_tb \
@@ -65,8 +63,7 @@ singleshot: sim_build/neorv32
 		/Users/martijn/Development/neorv32-test/neorv32/sim/xbus_gateway.vhd \
 		/Users/martijn/Development/neorv32-test/neorv32/sim/xbus_memory.vhd \
 		/Users/martijn/Development/neorv32-test/neorv32/sim/jtag_dmi_pkg.vhd \
-		/Users/martijn/Development/neorv32-test/neorv32/sim/neorv32_tb.vhd \
-		-e neorv32_tb
+		/Users/martijn/Development/neorv32-test/neorv32/sim/neorv32_tb.vhd
 
 
 # The "single" is to see if we can do this in a single command in an attempt to make it easier to use with cocotb.
@@ -74,6 +71,7 @@ singleshot: sim_build/neorv32
 runsingle: singleshot
 	nvc --work=sim_build/neorv32 \
 		-L /Users/martijn/Development/neorv32-test/sim_build \
+		-e neorv32_tb \
 		-r \
 		--ieee-warnings=off \
 		neorv32_tb \
