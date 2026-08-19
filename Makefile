@@ -82,3 +82,18 @@ runsingle: singleshot
 clean:
 	rm -rf sim_build
 	rm -f *.log
+
+myvphi/myvhpi.so:
+	$(MAKE) -C myvhpi
+
+.PHONE: mysim
+mysim: myvphi/myvhpi.so
+	nvc --work=sim_build/neorv32 \
+		-L /Users/martijn/Development/neorv32-test/sim_build \
+		-e neorv32_tb \
+		-r \
+		--load myvhpi/myvhpi.so \
+		--ieee-warnings=off \
+		neorv32_tb \
+		--stop-time=1000ms \
+		--wave=sim_build/waves.fst
