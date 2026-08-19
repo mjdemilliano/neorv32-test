@@ -18,6 +18,13 @@ Then run with
 make run
 ```
 
+To run the test suite with cocotb, just run
+
+```
+make sim_build/neorv32
+uv run python3 tests/test_runner.py
+```
+
 ## How the examples work
 
 Go to a particular example:

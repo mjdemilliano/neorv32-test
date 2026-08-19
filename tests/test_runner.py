@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 from pathlib import Path
 
@@ -8,20 +10,31 @@ def test_runner():
 
     neorv32_home = Path(__file__).resolve().parent.parent / "neorv32"
 
-    sources = [
-        str(neorv32_home / "rtl" / "test_setups" / "neorv32_test_setup_approm.vhd")
+    lib_sources = (neorv32_home / "rtl" / "file_list_core.f").read_text().splitlines()
+    sources = lib_sources + [
+        str(neorv32_home / "sim" / f)
+        for f in [
+            "psram_model.vhd",
+            "sim_uart_rx.vhd",
+            "xbus_fmem.vhd",
+            "xbus_gateway.vhd",
+            "xbus_memory.vhd",
+            "jtag_dmi_pkg.vhd",
+            "neorv32_tb.vhd",
+        ]
     ]
 
     runner = get_runner(sim)
     runner.build(
         sources=sources,
-        hdl_toplevel="neorv32_test_setup_approm",
+        hdl_toplevel="neorv32_tb",
         # Note: it is assumed that the neorv32 library has been compiled using the Makefile.
         build_args=[],
+        verbose=True,
     )
 
-    runner.test(hdl_toplevel="neorv32_test_setup_approm", test_module="test_hello_world,",
-                test_args=["--ieee-warnings=off"]
+    runner.test(hdl_toplevel="neorv32_tb", test_module="test_hello_world,",
+                test_args=["--ieee-warnings=off"], waves=True, verbose=True
                 )
 
 

@@ -7,17 +7,14 @@ log = logging.getLogger("test")
 
 @cocotb.test()
 async def test_blinky_led(dut):
-    clock = Clock(dut.clk_i, 100, "ns")  # 100 MHz
-    clock.start()
-
     await Timer(1, unit="ms")
-    log.info("1 ms has passed, output is %s", dut.gpio_o.value[0])
+    log.info("1 ms has passed, output is %s", dut.gpio_out.value[0])
 
     await Timer(100, unit="ms")
-    log.info("100 ms has passed, output is %s", dut.gpio_o.value[0])
+    log.info("100 ms has passed, output is %s", dut.gpio_out.value[0])
 
     await Timer(100, unit="ms")
-    log.info("100 ms has passed, output is %s", dut.gpio_o.value[0])
+    log.info("100 ms has passed, output is %s", dut.gpio_out.value[0])
 
     await Timer(100, unit="ms")
-    log.info("100 ms has passed, output is %s", dut.gpio_o.value[0])
+    log.info("100 ms has passed, output is %s", dut.gpio_out.value[0])
