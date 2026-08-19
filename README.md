@@ -38,3 +38,17 @@ Compile the image into a local file and install it into `neorv32_imem_image.vhd`
 ```
 make USER_FLAGS+=-DUART0_SIM_MODE clean image install
 ```
+
+# VHPI
+
+There is a plugin in the folder `myvhpi`. Run using
+
+```
+make mysim
+```
+
+To see more debug information printed, run with environment variable NVC_VHPI_VERBOSE=1:
+
+```
+NVC_VHPI_VERBOSE=1 make mysim
+```

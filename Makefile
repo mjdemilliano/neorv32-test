@@ -46,6 +46,7 @@ run: toplevel
 		-r \
 		--ieee-warnings=off \
 		neorv32_tb \
+		--stop-time=100ms \
 		--wave=sim_build/waves.fst
 
 
@@ -75,7 +76,7 @@ runsingle: singleshot
 		-r \
 		--ieee-warnings=off \
 		neorv32_tb \
-		--stop-time=1000ms \
+		--stop-time=100ms \
 		--wave=sim_build/waves.fst
 
 .PHONY: clean
@@ -95,5 +96,5 @@ mysim: myvphi/myvhpi.so
 		--load myvhpi/myvhpi.so \
 		--ieee-warnings=off \
 		neorv32_tb \
-		--stop-time=1000ms \
+		--stop-time=100ms \
 		--wave=sim_build/waves.fst
