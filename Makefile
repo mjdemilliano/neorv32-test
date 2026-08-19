@@ -19,7 +19,7 @@ neorv32/rtl/core/neorv32_imem_image.vhd: blink_led
 
 sim_build/neorv32: neorv32/rtl/core/neorv32_imem_image.vhd
 	mkdir -p sim_build && \
-	nvc --work=/Users/martijn/Development/neorv32-test/sim_build/neorv32 \
+	nvc --work=sim_build/neorv32 \
 	 	-a \
 		-f /Users/martijn/Development/neorv32-test/neorv32/rtl/file_list_core.f \
 		/Users/martijn/Development/neorv32-test/neorv32/sim/psram_model.vhd \
@@ -50,6 +50,35 @@ run: toplevel
 		neorv32_tb \
 		--wave=sim_build/waves.fst
 
+
+.PHONY: singleshot
+singleshot: sim_build/neorv32
+	mkdir -p sim_build && \
+	nvc --work=neorv32:sim_build/neorv32 \
+		-L /Users/martijn/Development/neorv32-test/sim_build \
+		-a \
+		--preserve-case \
+	    -f /Users/martijn/Development/neorv32-test/neorv32/rtl/file_list_core.f \
+		/Users/martijn/Development/neorv32-test/neorv32/sim/psram_model.vhd \
+		/Users/martijn/Development/neorv32-test/neorv32/sim/sim_uart_rx.vhd \
+		/Users/martijn/Development/neorv32-test/neorv32/sim/xbus_fmem.vhd \
+		/Users/martijn/Development/neorv32-test/neorv32/sim/xbus_gateway.vhd \
+		/Users/martijn/Development/neorv32-test/neorv32/sim/xbus_memory.vhd \
+		/Users/martijn/Development/neorv32-test/neorv32/sim/jtag_dmi_pkg.vhd \
+		/Users/martijn/Development/neorv32-test/neorv32/sim/neorv32_tb.vhd \
+		-e neorv32_tb
+
+
+# The "single" is to see if we can do this in a single command in an attempt to make it easier to use with cocotb.
+.PHONY: runsingle
+runsingle: singleshot
+	nvc --work=sim_build/neorv32 \
+		-L /Users/martijn/Development/neorv32-test/sim_build \
+		-r \
+		--ieee-warnings=off \
+		neorv32_tb \
+		--stop-time=1000ms \
+		--wave=sim_build/waves.fst
 
 .PHONY: clean
 clean:
