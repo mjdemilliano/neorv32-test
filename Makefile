@@ -13,9 +13,16 @@ blink_led:
 		make USER_FLAGS+=-DUART0_SIM_MODE clean image install \
 	)
 
+.PHONY: demo_slink
+demo_slink:
+	(cd neorv32/sw/example/demo_slink && \
+		make USER_FLAGS+=-DUART0_SIM_MODE clean image install \
+	)
+
 # Define here which example program is installed in the imem
 # neorv32/rtl/core/neorv32_imem_image.vhd: hello_world
-neorv32/rtl/core/neorv32_imem_image.vhd: blink_led
+# neorv32/rtl/core/neorv32_imem_image.vhd: blink_led
+neorv32/rtl/core/neorv32_imem_image.vhd: demo_slink
 
 sim_build/neorv32: neorv32/rtl/core/neorv32_imem_image.vhd
 	mkdir -p sim_build && \
@@ -79,17 +86,15 @@ runsingle: singleshot
 		--stop-time=100ms \
 		--wave=sim_build/waves.fst
 
-.PHONY: clean
-clean:
-	rm -rf sim_build
-	rm -f *.log
-
 VHPI_PLUGIN := myvhpi/target/debug/libmyvhpi.dylib
-${VHPI_PLUGIN}:
+${VHPI_PLUGIN}: plugin
+
+.PHONY: plugin
+plugin:
 	(cd myvhpi && cargo build)
 
-.PHONE: mysim
-mysim: ${VHPI_PLUGIN}
+.PHONY: mysim
+mysim: plugin
 	nvc --work=sim_build/neorv32 \
 		-L /Users/martijn/Development/neorv32-test/sim_build \
 		-e neorv32_tb \
@@ -99,3 +104,9 @@ mysim: ${VHPI_PLUGIN}
 		neorv32_tb \
 		--stop-time=100ms \
 		--wave=sim_build/waves.fst
+
+.PHONY: clean
+clean:
+	rm -rf sim_build
+	rm -f *.log
+	rm -f ${VHPI_PLUGIN}
