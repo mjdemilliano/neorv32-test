@@ -25,8 +25,9 @@ demo_slink:
 neorv32/rtl/core/neorv32_imem_image.vhd: demo_slink
 
 sim_build/neorv32: neorv32/rtl/core/neorv32_imem_image.vhd
-	mkdir -p sim_build && \
-	nvc --work=sim_build/neorv32 \
+	@echo "Making neorv32 base image (incl. softcore program)"
+	@mkdir -p sim_build
+	@nvc --work=sim_build/neorv32 \
 	 	-a \
 		-f /Users/martijn/Development/neorv32-test/neorv32/rtl/file_list_core.f \
 		/Users/martijn/Development/neorv32-test/neorv32/sim/psram_model.vhd \
@@ -34,7 +35,8 @@ sim_build/neorv32: neorv32/rtl/core/neorv32_imem_image.vhd
 
 .PHONY: toplevel
 toplevel: sim_build/neorv32
-	nvc --work=sim_build/work \
+	@echo "Making testbench"
+	nvc --work=neorv32:sim_build/neorv32 \
 		-L /Users/martijn/Development/neorv32-test/sim_build \
 		-a \
 		--preserve-case \
@@ -91,11 +93,12 @@ ${VHPI_PLUGIN}: plugin
 
 .PHONY: plugin
 plugin:
-	(cd myvhpi && cargo build)
+	@echo "Building VHPI plugin (if needed)"
+	@(cd myvhpi && cargo build)
 
 .PHONY: mysim
-mysim: plugin
-	nvc --work=sim_build/neorv32 \
+mysim: plugin toplevel
+	@nvc --work=sim_build/neorv32 \
 		-L /Users/martijn/Development/neorv32-test/sim_build \
 		-e neorv32_tb \
 		-r \
