@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use vhpi::{CbData, CbReason, Format, Handle, LogicVal, PutValueMode::ForcePropagate, Value};
+use vhpi::{CbData, CbReason, Format, Handle, LogicVal, PutValueMode, Value, LogicVec};
 
 pub type Node = u8;
 
@@ -10,11 +10,17 @@ pub struct ReceivedMessage<'a> {
     pub data: &'a [u32],
 }
 
-pub type MessageHandler = fn(&ReceivedMessage);
+pub type MessageHandler = fn(&Interface, &ReceivedMessage);
+pub type TXReadyHandler = fn(&Interface, bool);
+
+#[derive(Debug)]
+pub enum Error {
+    TXNotReady,
+}
 
 #[derive(Debug)]
 #[allow(dead_code)]
-struct OneDirectionInterface {
+pub struct OneDirectionInterface {
     // Note: don't put additional things here which are not Sync or Send, because I'm telling below that `Interface` is `Sync` and `Send`
     // to be able to put this whole thing in a `OnceCell`, see below.
     data: Handle,
@@ -35,6 +41,7 @@ pub struct Interface {
     slink_tx_handle: Handle,
 
     on_message_received: Option<MessageHandler>,
+    on_tx_ready_changed: Option<TXReadyHandler>,
     rx_buffer: Mutex<Vec<u32>>
 }
 
@@ -47,7 +54,7 @@ unsafe impl Send for Interface {}
 impl Interface {
     // Note: need to return `Rc` because need to be able to clone a reference to it for use in the callback handlers.
     // Actually, need to return `Arc` otherwise cannot put it in a OnceLock.
-    pub fn init(root: &Handle, on_message_received: Option<MessageHandler>) -> Arc<Interface> {
+    pub fn init(root: &Handle, on_message_received: Option<MessageHandler>, on_tx_ready_changed: Option<TXReadyHandler>) -> Arc<Interface> {
         let slink_rx = root.handle_by_name("slink_rx").expect("signal slink_rx not found");
         let slink_tx = root.handle_by_name("slink_tx").expect("signal slink_tx not found");
         let slink_rx_interface = OneDirectionInterface {
@@ -70,6 +77,7 @@ impl Interface {
             rx: slink_rx_interface,
             tx: slink_tx_interface,
             on_message_received,
+            on_tx_ready_changed,
             rx_buffer: Mutex::new(Vec::new()),
         });
         let interface_ref = interface.clone();
@@ -77,7 +85,7 @@ impl Interface {
             interface_ref.rx_valid_changed(data)
         }).expect("failed to register value-change callback");
         // Make rx.ready high to enable data being transferred.
-        let _ = interface.rx.ready.put_value(Value::Logic(LogicVal::One), ForcePropagate).expect("failed to set rx.ready");
+        let _ = interface.rx.ready.put_value(Value::Logic(LogicVal::One), PutValueMode::ForcePropagate).expect("failed to set rx.ready");
         interface
     }
 
@@ -126,7 +134,7 @@ impl Interface {
                     Err(err) => panic!("error converting addr vec into Node: {err:?}"),
                 };
                 if let Some(handler) = self.on_message_received {
-                    handler(&ReceivedMessage { source, data: buffer.as_slice() });
+                    handler(self, &ReceivedMessage { source, data: buffer.as_slice() });
                 }
                 // Clear the buffer.
                 buffer.clear();
@@ -137,6 +145,28 @@ impl Interface {
             // vhpi::printf!("SLINK RX became invalid");
         }
     }
+
+    pub fn tx_is_ready(&self) -> bool {
+        match self.tx.ready.get_value(Format::Logic) {
+            Ok(Value::Logic(value)) => value == LogicVal::One,
+            Ok(other) => panic!("unexpected result type for ready: {other:?}"),
+            Err(err) => panic!("error getting value for ready: {err:?}"),
+        }
+    }
+
+    pub fn send_word(&self, destination: u8, word: u32, is_last: bool) -> Result<(), Error> {
+        let is_ready = self.tx_is_ready();
+        vhpi::printf!("sending next word on TX: {word:08x} (last={is_last:?})");
+        if !is_ready {
+            return Err(Error::TXNotReady);
+        }
+        self.tx.addr.put_value(Value::LogicVec(LogicVec::from_uint(destination, 4)), PutValueMode::DepositPropagate).expect("failed to put destination addr");
+        self.tx.data.put_value(Value::LogicVec(LogicVec::from_uint(word, 32)), PutValueMode::DepositPropagate).expect("failed to put tx data");
+        self.tx.last.put_value(Value::Logic(if is_last { LogicVal::One } else { LogicVal::Zero }), PutValueMode::DepositPropagate).expect("failed to set last flag");
+        self.tx.valid.put_value(Value::Logic(LogicVal::One), PutValueMode::DepositPropagate).expect("failed to set data to be valid");
+        Ok(())
+    }
+
 }
 
 impl Drop for Interface {
