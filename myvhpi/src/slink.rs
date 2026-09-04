@@ -108,14 +108,14 @@ impl Interface {
                 Ok(other) => panic!("got unexpected result type for rx data: {other:?}"),
                 Err(err) => panic!("failed to read rx data: {err:?}"),
             };
-            let rx_data_bitstring = rx_data.to_string();
-            vhpi::printf!("SLINK RX became valid: value received from {rx_source_addr}: {rx_data_bitstring} [lst={rx_last:?}]");
 
             // Add data to buffer.
             let new_word: u32 = match rx_data.try_into() {
                 Ok(value) => value,
                 Err(err) => panic!("error converting data word to u32: {err:?}"),
             };
+            // vhpi::printf!("SLINK RX became valid: value received from {rx_source_addr}: {new_word:x} [lst={rx_last:?}]");
+
             let mut buffer = self.rx_buffer.lock().unwrap();
             buffer.push(new_word);
 
@@ -128,11 +128,13 @@ impl Interface {
                 if let Some(handler) = self.on_message_received {
                     handler(&ReceivedMessage { source, data: buffer.as_slice() });
                 }
+                // Clear the buffer.
+                buffer.clear();
             }
         }
         else
         {
-            vhpi::printf!("SLINK RX became invalid");
+            // vhpi::printf!("SLINK RX became invalid");
         }
     }
 }

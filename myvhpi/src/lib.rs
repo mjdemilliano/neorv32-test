@@ -21,7 +21,7 @@ fn gpio_out_changed(data: &CbData) {
 }
 
 fn slink_message_received(message: &slink::ReceivedMessage) {
-    vhpi::printf!("SLINK message received from {}: {:?}", message.source, message.data);
+    vhpi::printf!("SLINK message received from {}: {}", message.source, message.data.iter().map(|block| format!("{:08x}", block)).collect::<Vec<_>>().join(" "));
 }
 
 fn start_of_simulation(_data: &CbData) {
