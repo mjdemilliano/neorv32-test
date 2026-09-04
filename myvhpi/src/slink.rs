@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use vhpi::{CbData, CbReason, Format, Handle, LogicVal, PutValueMode::Deposit, Value};
+use vhpi::{CbData, CbReason, Format, Handle, LogicVal, PutValueMode::ForcePropagate, Value};
 
 pub type Node = u8;
 
@@ -14,19 +14,25 @@ pub type MessageHandler = fn(&ReceivedMessage);
 
 #[derive(Debug)]
 #[allow(dead_code)]
+struct OneDirectionInterface {
+    // Note: don't put additional things here which are not Sync or Send, because I'm telling below that `Interface` is `Sync` and `Send`
+    // to be able to put this whole thing in a `OnceCell`, see below.
+    data: Handle,
+    addr: Handle,
+    valid: Handle,
+    last: Handle,
+    ready: Handle,
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
 pub struct Interface {
     // Note: don't put additional things here which are not Sync or Send, because I'm telling below that `Interface` is `Sync` and `Send`
     // to be able to put this whole thing in a `OnceCell`, see below.
-    rx_dat_i: Handle,
-    rx_src_i: Handle,
-    rx_val_i: Handle,
-    rx_lst_i: Handle,
-    rx_rdy_o: Handle,
-    tx_dat_o: Handle,
-    tx_dst_o: Handle,
-    tx_val_o: Handle,
-    tx_lst_o: Handle,
-    tx_rdy_i: Handle,
+    rx: OneDirectionInterface,
+    tx: OneDirectionInterface,
+    slink_rx_handle: Handle,
+    slink_tx_handle: Handle,
 
     on_message_received: Option<MessageHandler>,
     rx_buffer: Mutex<Vec<u32>>
@@ -42,57 +48,71 @@ impl Interface {
     // Note: need to return `Rc` because need to be able to clone a reference to it for use in the callback handlers.
     // Actually, need to return `Arc` otherwise cannot put it in a OnceLock.
     pub fn init(root: &Handle, on_message_received: Option<MessageHandler>) -> Arc<Interface> {
-        let interface = Arc::new(Interface {
-            rx_dat_i: root.handle_by_name("rx_dat_i").expect("signal rx_dat_i not found"),
-            rx_src_i: root.handle_by_name("rx_src_i").expect("signal rx_src_i not found"),
-            rx_val_i: root.handle_by_name("rx_val_i").expect("signal rx_val_i not found"),
-            rx_lst_i: root.handle_by_name("rx_lst_i").expect("signal rx_lst_i not found"),
-            rx_rdy_o: root.handle_by_name("rx_rdy_o").expect("signal rx_rdy_o not found"),
-            tx_dat_o: root.handle_by_name("tx_dat_o").expect("signal tx_dat_o not found"),
-            tx_dst_o: root.handle_by_name("tx_dst_o").expect("signal tx_dst_o not found"),
-            tx_val_o: root.handle_by_name("tx_val_o").expect("signal tx_val_o not found"),
-            tx_lst_o: root.handle_by_name("tx_lst_o").expect("signal tx_lst_o not found"),
-            tx_rdy_i: root.handle_by_name("tx_rdy_i").expect("signal tx_rdy_i not found"),
+        let slink_rx = root.handle_by_name("slink_rx").expect("signal slink_rx not found");
+        let slink_tx = root.handle_by_name("slink_tx").expect("signal slink_tx not found");
+        let slink_rx_interface = OneDirectionInterface {
+            data: slink_rx.handle_by_name("data").expect("signal slink_rx.data not found"),
+            addr: slink_rx.handle_by_name("addr").expect("signal slink_rx.addr not found"),
+            valid: slink_rx.handle_by_name("valid").expect("signal slink_rx.valid not found"),
+            last: slink_rx.handle_by_name("last").expect("signal slink_rx.last not found"),
+            ready: slink_rx.handle_by_name("ready").expect("signal slink_rx.ready not found"),
+        };
+        let slink_tx_interface = OneDirectionInterface {
+            data: slink_tx.handle_by_name("data").expect("signal slink_tx.data not found"),
+            addr: slink_tx.handle_by_name("addr").expect("signal slink_tx.addr not found"),
+            valid: slink_tx.handle_by_name("valid").expect("signal slink_tx.valid not found"),
+            last: slink_tx.handle_by_name("last").expect("signal slink_tx.last not found"),
+            ready: slink_tx.handle_by_name("ready").expect("signal slink_tx.ready not found"),
+        };
+        let interface: Arc<Interface> = Arc::new(Interface {
+            slink_rx_handle: slink_rx,
+            slink_tx_handle: slink_tx,
+            rx: slink_rx_interface,
+            tx: slink_tx_interface,
             on_message_received,
             rx_buffer: Mutex::new(Vec::new()),
         });
         let interface_ref = interface.clone();
-        interface.rx_val_i.register_cb(CbReason::ValueChange, move |data| {
-            interface_ref.rx_val_i_changed(data)
+        interface.rx.valid.register_cb(CbReason::ValueChange, move |data| {
+            interface_ref.rx_valid_changed(data)
         }).expect("failed to register value-change callback");
-        // Make rx_rdy_o high to enable data being transferred.
-        let _ = interface.rx_rdy_o.put_value(Value::Logic(LogicVal::One), Deposit).expect("failed to set rx_rdy_o");
+        // Make rx.ready high to enable data being transferred.
+        let _ = interface.rx.ready.put_value(Value::Logic(LogicVal::One), ForcePropagate).expect("failed to set rx.ready");
         interface
     }
 
-    fn rx_val_i_changed(&self, data: &CbData) {
-        let rx_val_i = match data.obj().get_value(Format::Logic) {
+    fn rx_valid_changed(&self, data: &CbData) {
+        let rx_valid = match data.obj().get_value(Format::Logic) {
             Ok(Value::Logic(value)) => value,
-            Ok(other) => panic!("got unexpected result type for rx_val_i: {other:?}"),
-            Err(err) => panic!("failed to read rx_val_i: {err:?}"),
+            Ok(other) => panic!("got unexpected result type for rx.valid: {other:?}"),
+            Err(err) => panic!("failed to read rx.valid: {err:?}"),
         };
-        if rx_val_i == LogicVal::H || rx_val_i == LogicVal::One {
+        if rx_valid == LogicVal::H || rx_valid == LogicVal::One {
             // Value should be valid.
-            let rx_src_i = match data.obj().get_value(Format::ObjType) {
+            let rx_source_addr = match self.rx.addr.get_value(Format::ObjType) {
                 Ok(Value::LogicVec(bits)) => bits,
-                Ok(other) => panic!("got unexpected result type for rx_src_i: {other:?}"),
-                Err(err) => panic!("failed to read rx_src_i: {err:?}"),
+                Ok(other) => panic!("got unexpected result type for rx source addr: {other:?}"),
+                Err(err) => panic!("failed to read rx source addr: {err:?}"),
             };
-            let rx_lst_i = match data.obj().get_value(Format::Logic) {
+            let rx_source_addr: u8 = match rx_source_addr.try_into() {
+                Ok(value) => value,
+                Err(err) => panic!("error converting bit vector to u8 for addr: {err:?}"),
+            };
+            let rx_last = match self.rx.last.get_value(Format::Logic) {
                 Ok(Value::Logic(value)) => value,
-                Ok(other) => panic!("got unexpected result type for rx_lst_i: {other:?}"),
-                Err(err) => panic!("failed to read rx_lst_i: {err:?}"),
+                Ok(other) => panic!("got unexpected result type for rx last: {other:?}"),
+                Err(err) => panic!("failed to read rx last: {err:?}"),
             };
-            let rx_dat_i = match data.obj().get_value(Format::ObjType) {
+            let rx_data = match self.rx.data.get_value(Format::ObjType) {
                 Ok(Value::LogicVec(bits)) => bits,
-                Ok(other) => panic!("got unexpected result type for rx_dat_i: {other:?}"),
-                Err(err) => panic!("failed to read rx_dat_i: {err:?}"),
+                Ok(other) => panic!("got unexpected result type for rx data: {other:?}"),
+                Err(err) => panic!("failed to read rx data: {err:?}"),
             };
-            let rx_dat_i_bitstring = rx_dat_i.to_string();
-            vhpi::printf!("SLINK RX became valid: value received from {rx_src_i:?}: {rx_dat_i_bitstring} [lst={rx_lst_i:?}]");
+            let rx_data_bitstring = rx_data.to_string();
+            vhpi::printf!("SLINK RX became valid: value received from {rx_source_addr}: {rx_data_bitstring} [lst={rx_last:?}]");
 
             // Add data to buffer.
-            let new_word: u32 = match rx_dat_i.try_into() {
+            let new_word: u32 = match rx_data.try_into() {
                 Ok(value) => value,
                 Err(err) => panic!("error converting data word to u32: {err:?}"),
             };
@@ -100,10 +120,10 @@ impl Interface {
             buffer.push(new_word);
 
             // When message is complete, call the handler.
-            if rx_lst_i == LogicVal::H || rx_lst_i == LogicVal::One {
-                let source: Node = match rx_src_i.try_into() {
+            if rx_last == LogicVal::H || rx_last == LogicVal::One {
+                let source: Node = match rx_source_addr.try_into() {
                     Ok(value) => value,
-                    Err(err) => panic!("error converting src vec into Node: {err:?}"),
+                    Err(err) => panic!("error converting addr vec into Node: {err:?}"),
                 };
                 if let Some(handler) = self.on_message_received {
                     handler(&ReceivedMessage { source, data: buffer.as_slice() });
