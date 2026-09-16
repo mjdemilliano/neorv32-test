@@ -23,26 +23,25 @@ fn gpio_out_changed(data: &CbData) {
 }
 
 fn slink_message_received(slink: &slink::Interface, message: &slink::ReceivedMessage) {
-    vhpi::printf!("SLINK message received from {}: {}", message.source, message.data.iter().map(|block| format!("{:08x}", block)).collect::<Vec<_>>().join(" "));
+    vhpi::printf!("app: SLINK message received from {}: {}", message.source, message.data.iter().map(|block| format!("{:08x}", block)).collect::<Vec<_>>().join(" "));
     let lock = RESPONSE.get().expect("expecting RESPONSE mutex to exist");
     let mut response = lock.write().expect("failed to get write lock on RESPONSE");
     if !response.is_empty() {
-        vhpi::printf!("warning: response buffer is not empty? bailing");
+        vhpi::printf!("app: warning: response buffer is not empty? bailing");
     } else {
         response.push_back(0x01020304);
         response.push_back(0x09080706);
-        if slink.tx_is_ready() {
+        if slink.rx_is_ready() {
             let new_word = response.pop_front().expect("failed to pop front (even though I just pushed stuff?)");
             let is_last = response.is_empty();
             slink.send_word(0, new_word, is_last).expect("failed to send next word");
         } else {
-            vhpi::printf!("tx is not ready for receiving response");
+            vhpi::printf!("app: rx is not yet ready for receiving response; will trigger when rx ready changes");
         }
     }
 }
 
-fn slink_tx_ready_changed(slink: &slink::Interface, ready: bool) {
-    vhpi::printf!("slink_tx ready changed: {ready:?}");
+fn slink_rx_ready_changed(slink: &slink::Interface, ready: bool) {
     let lock = RESPONSE.get().expect("failed to get RESPONSE");
     let mut response = lock.write().expect("failed to get write lock on RESPONSE");
     if ready && !response.is_empty() {
@@ -60,7 +59,7 @@ fn start_of_simulation(_data: &CbData) {
     let gpio_out = root.handle_by_name("gpio_out").expect("signal gpio_out not found");
     gpio_out.register_cb(CbReason::ValueChange, gpio_out_changed).expect("failed to register value-change callback");
 
-    let slink = slink::Interface::init(&root, Some(slink_message_received),Some(slink_tx_ready_changed));
+    let slink = slink::Interface::init(&root, Some(slink_message_received),Some(slink_rx_ready_changed));
     // This is the starting point of this Rust code, so we are sure that `SLINK_INTERFACE` hasn't yet been initialized.
     // So it's ok to do this.
     let _ = SLINK_INTERFACE.set(slink).expect("failed to set SLINK_INTERFACE global");
