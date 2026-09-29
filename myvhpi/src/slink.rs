@@ -199,6 +199,12 @@ impl Interface {
             // SAFETY: Assuming that Interface is never moved.
             let interface_ref: &Interface = unsafe { &*me };
             interface_ref.rx.valid.put_value(Value::Logic(LogicVal::One), PutValueMode::ForcePropagate).expect("failed to set data to be valid");
+            vhpi::register_cb_after_delay((2*CLOCK_CYCLE_FS).into(), move |_| {
+                if let Some(handle_rx_ready) = interface_ref.on_rx_ready_changed {
+                    // Call handler again. Maybe we can already send the next word.
+                    handle_rx_ready(interface_ref, interface_ref.rx_is_ready());
+                }
+            }).expect("error scheduling callback for checking ready line");
         }).expect("error scheduling callback for next time step");
         Ok(())
     }

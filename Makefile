@@ -105,7 +105,7 @@ mysim: plugin toplevel
 		--load ${VHPI_PLUGIN} \
 		--ieee-warnings=off \
 		neorv32_tb \
-		--stop-time=200ms \
+		--stop-time=220ms \
 		--wave=sim_build/waves.fst
 
 .PHONY: clean
